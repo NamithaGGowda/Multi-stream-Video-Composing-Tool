@@ -1,0 +1,352 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// EditFrame — Prisma Schema
+// PostgreSQL database schema for the complete video editing platform.
+// Run `npx prisma migrate dev` to apply.
+// ─────────────────────────────────────────────────────────────────────────────
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum Plan {
+  FREE
+  PRO
+}
+
+enum MediaType {
+  VIDEO
+  AUDIO
+  IMAGE
+}
+
+enum ExportStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum ExportFormat {
+  MP4
+  MOV
+  WEBM
+  GIF
+}
+
+enum ExportResolution {
+  R_480P
+  R_720P
+  R_1080P
+  R_1440P
+  R_4K
+}
+
+enum AIJobType {
+  AUTO_CAPTION
+  BACKGROUND_REMOVAL
+  NOISE_SUPPRESSION
+  SMART_CUT
+}
+
+enum AIJobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum VideoJobType {
+  TRIM
+  MERGE
+  FILTER
+  SPEED_CHANGE
+  TEXT_OVERLAY
+  AUDIO_MIX
+  TRANSITION
+  REVERSE
+}
+
+enum VideoJobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+// ─── User ────────────────────────────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  // Null for OAuth-only users who never set a password
+  passwordHash  String?
+  displayName   String
+  avatarUrl     String?
+  // Cloudinary public_id for the avatar — needed for deletion
+  avatarPublicId String?
+  plan          Plan      @default(FREE)
+  isVerified    Boolean   @default(false)
+  // Google OAuth subject ID
+  googleId      String?   @unique
+
+  // Usage tracking (reset monthly by a cron job / worker)
+  storageUsedMb    Float   @default(0)
+  exportMinutesUsed Float  @default(0)
+  usageResetAt     DateTime @default(now())
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  refreshTokens     RefreshToken[]
+  projects          Project[]
+  mediaAssets       MediaAsset[]
+  exportJobs        ExportJob[]
+  aiJobs            AIJob[]
+  videoJobs         VideoJob[]
+
+  @@map("users")
+}
+
+// ─── RefreshToken ─────────────────────────────────────────────────────────────
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Device/browser fingerprint for multi-device support
+  userAgent String?
+  ipAddress String?
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([token])
+  @@map("refresh_tokens")
+}
+
+// ─── Project ─────────────────────────────────────────────────────────────────
+
+model Project {
+  id          String  @id @default(uuid())
+  userId      String
+  user        User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  title       String  @default("Untitled Project")
+  description String?
+
+  // Video properties
+  resolution  String  @default("1920x1080")  // e.g. "1920x1080", "1080x1920"
+  fps         Int     @default(30)
+  duration    Float   @default(0)            // seconds
+  aspectRatio String  @default("16:9")
+
+  // Thumbnail (Cloudinary URL)
+  thumbnailUrl      String?
+  thumbnailPublicId String?
+
+  // Full timeline JSON blob — tracks, clips, effects, transitions, text, audio
+  // Stored as Json — Prisma serialises/deserialises automatically
+  timelineData Json?
+
+  // Soft-delete
+  deletedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  timelineVersions TimelineVersion[]
+  exportJobs       ExportJob[]
+  videoJobs        VideoJob[]
+
+  @@index([userId])
+  @@index([deletedAt])
+  @@map("projects")
+}
+
+// ─── TimelineVersion ─────────────────────────────────────────────────────────
+// Stores the last N saves per project for undo/version history.
+
+model TimelineVersion {
+  id          String  @id @default(uuid())
+  projectId   String
+  project     Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  // Sequential version number within the project
+  versionNumber Int
+  label         String?   // e.g. "Auto-save", "Before export"
+  timelineData  Json
+  createdAt     DateTime @default(now())
+
+  @@index([projectId, versionNumber])
+  @@map("timeline_versions")
+}
+
+// ─── MediaAsset ──────────────────────────────────────────────────────────────
+
+model MediaAsset {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  type      MediaType
+  name      String                  // original file name
+  mimeType  String                  // e.g. "video/mp4"
+
+  // Cloudinary
+  cloudinaryPublicId  String  @unique
+  cloudinaryUrl       String           // delivery URL (auto-quality)
+  cloudinarySecureUrl String           // https delivery URL
+
+  // For video/audio
+  duration    Float?   // seconds
+  fps         Float?
+  width       Int?
+  height      Int?
+
+  // For video: generated thumbnail
+  thumbnailUrl      String?
+  thumbnailPublicId String?
+
+  // File size tracking for quota
+  fileSizeMb Float   @default(0)
+
+  // Soft-delete
+  deletedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([type])
+  @@index([deletedAt])
+  @@map("media_assets")
+}
+
+// ─── ExportJob ───────────────────────────────────────────────────────────────
+
+model ExportJob {
+  id        String       @id @default(uuid())
+  userId    String
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projectId String
+  project   Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  // BullMQ job ID — used to look up queue progress
+  bullJobId String?      @unique
+
+  status    ExportStatus @default(PENDING)
+  progress  Int          @default(0)         // 0–100
+
+  // Export settings snapshot
+  format     ExportFormat     @default(MP4)
+  resolution ExportResolution @default(R_1080P)
+  fps        Int              @default(30)
+  quality    String           @default("high")   // draft | medium | high | master
+  codec      String           @default("H.264")
+  audioBitrate String         @default("192k")
+
+  // Timeline JSON snapshot at time of export (so results are reproducible)
+  timelineSnapshot Json?
+
+  // Result
+  outputUrl       String?   // Cloudinary delivery URL
+  outputPublicId  String?   // Cloudinary public_id
+  outputSizeMb    Float?
+  durationSeconds Float?
+
+  // Error details if failed
+  errorMessage String?
+  errorStack   String?
+
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([projectId])
+  @@index([status])
+  @@map("export_jobs")
+}
+
+// ─── VideoJob ────────────────────────────────────────────────────────────────
+// Individual ffmpeg processing jobs (trim, merge, filter, etc.)
+
+model VideoJob {
+  id        String         @id @default(uuid())
+  userId    String
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projectId String?
+  project   Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  bullJobId String?        @unique
+  type      VideoJobType
+  status    VideoJobStatus @default(PENDING)
+  progress  Int            @default(0)
+
+  // Input parameters for the specific job type (flexible JSON)
+  params    Json
+
+  // Output
+  outputCloudinaryPublicId String?
+  outputCloudinaryUrl      String?
+
+  errorMessage String?
+
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([projectId])
+  @@index([status])
+  @@map("video_jobs")
+}
+
+// ─── AIJob ───────────────────────────────────────────────────────────────────
+// One model for all AI feature jobs. type discriminates the feature.
+
+model AIJob {
+  id        String      @id @default(uuid())
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  bullJobId String?     @unique
+  type      AIJobType
+  status    AIJobStatus @default(PENDING)
+  progress  Int         @default(0)
+
+  // Input config for this AI job (mediaAssetId, language, options, etc.)
+  inputParams Json
+
+  // Output from the AI feature (captions VTT/SRT, mask URL, processed audio URL, etc.)
+  outputData Json?
+
+  // Human-readable result description or error
+  resultMessage String?
+  errorMessage  String?
+
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([type])
+  @@index([status])
+  @@map("ai_jobs")
+}

@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
+    <meta name="theme-color" content="#0A0F1E" />
+    <meta name="description" content="EditFrame — Professional Video Editor. Multi-track timeline editing, transitions, effects, and export. Works in your browser." />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="EditFrame" />
+
+    <!-- Google Fonts: Syne (display) + DM Sans (UI) + JetBrains Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=JetBrains+Mono:wght@300;400;500&display=swap"
+      rel="stylesheet"
+    />
+
+    <title>EditFrame — Professional Video Editor</title>
+
+    <style>
+      /* Critical above-the-fold styles — prevent FOUC */
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+      html, body, #root {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #0A0F1E;
+        color: #E8EDF7;
+        font-family: 'DM Sans', sans-serif;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        text-rendering: optimizeLegibility;
+      }
+
+      /* Custom scrollbar — thin, dark studio style */
+      ::-webkit-scrollbar { width: 4px; height: 4px; }
+      ::-webkit-scrollbar-track { background: #0A0F1E; }
+      ::-webkit-scrollbar-thumb { background: #243659; border-radius: 2px; }
+      ::-webkit-scrollbar-thumb:hover { background: #2DD4BF; }
+      ::-webkit-scrollbar-corner { background: #0A0F1E; }
+
+      /* Selection color */
+      ::selection { background: rgba(45, 212, 191, 0.25); color: #E8EDF7; }
+
+      /* Drag-over states */
+      [data-drag-target="true"] { outline: 2px dashed rgba(45, 212, 191, 0.5) !important; }
+
+      /* Prevent iOS tap highlight */
+      * { -webkit-tap-highlight-color: transparent; }
+
+      /* Range input reset for timeline scrubber */
+      input[type="range"] {
+        -webkit-appearance: none;
+        appearance: none;
+        background: transparent;
+        cursor: pointer;
+      }
+      input[type="range"]::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: #2DD4BF;
+        border: 2px solid #0A0F1E;
+        box-shadow: 0 0 6px rgba(45, 212, 191, 0.5);
+      }
+      input[type="range"]::-moz-range-thumb {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: #2DD4BF;
+        border: 2px solid #0A0F1E;
+        box-shadow: 0 0 6px rgba(45, 212, 191, 0.5);
+      }
+
+      /* Loading state */
+      #root-loading {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #0A0F1E;
+        z-index: 9999;
+        flex-direction: column;
+        gap: 16px;
+      }
+      #root-loading .logo-text {
+        font-family: 'Syne', sans-serif;
+        font-size: 1.75rem;
+        font-weight: 800;
+        color: #E8EDF7;
+        letter-spacing: -0.02em;
+      }
+      #root-loading .logo-text span {
+        color: #2DD4BF;
+      }
+      #root-loading .loading-bar {
+        width: 180px;
+        height: 2px;
+        background: #1B2A4A;
+        border-radius: 1px;
+        overflow: hidden;
+      }
+      #root-loading .loading-bar-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #2DD4BF, #7B8CDE);
+        border-radius: 1px;
+        animation: loadingProgress 1.2s ease-in-out infinite;
+      }
+      @keyframes loadingProgress {
+        0% { width: 0%; margin-left: 0%; }
+        50% { width: 60%; margin-left: 20%; }
+        100% { width: 0%; margin-left: 100%; }
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Loading screen shown before React hydrates -->
+    <div id="root-loading">
+      <div class="logo-text">Edit<span>Frame</span></div>
+      <div class="loading-bar">
+        <div class="loading-bar-fill"></div>
+      </div>
+    </div>
+
+    <div id="root"></div>
+
+    <script>
+      // Remove loading screen once React mounts
+      window.__editframe_hide_loader = function() {
+        const loader = document.getElementById('root-loading');
+        if (loader) {
+          loader.style.opacity = '0';
+          loader.style.transition = 'opacity 0.3s ease';
+          setTimeout(() => loader.remove(), 300);
+        }
+      };
+    </script>
+
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
