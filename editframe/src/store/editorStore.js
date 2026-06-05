@@ -418,3 +418,47 @@ export const useEditorStore = create(
     }))
   )
 )
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WebSocket event handlers — called by useWebSocket.js
+// These update export state in real-time as the backend processes jobs
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Patch the store to add WS handlers
+useEditorStore.setState((state) => ({
+  ...state,
+
+  // Auth state (set after login)
+  accessToken: null,
+  setAccessToken: (token) => useEditorStore.setState({ accessToken: token }),
+
+  // Active export job ID (for WS subscription)
+  activeExportJobId: null,
+
+  // Real-time export progress from WebSocket
+  handleExportProgress: ({ jobId, progress, stage }) => {
+    useEditorStore.setState({
+      exportProgress: progress,
+      exportStage: stage || '',
+    });
+  },
+
+  handleExportComplete: ({ jobId, outputUrl, sizeMb }) => {
+    useEditorStore.setState({
+      exportProgress:   100,
+      exportModalOpen:  true,
+      exportOutputUrl:  outputUrl,
+      exportOutputSize: sizeMb,
+      exportDone:       true,
+    });
+  },
+
+  handleExportFailed: ({ jobId, error }) => {
+    useEditorStore.setState({
+      exportProgress:  0,
+      exportError:     error,
+      exportDone:      false,
+    });
+    console.error('[Export] Job failed:', error);
+  },
+}));

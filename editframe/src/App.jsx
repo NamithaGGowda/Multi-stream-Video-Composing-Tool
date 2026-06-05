@@ -1,387 +1,275 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// src/App.jsx
+// Root component — handles auth state, shows LoginPage or the editor
+// ─────────────────────────────────────────────────────────────────────────────
+
 import React, { useEffect, useCallback, useRef, useState } from 'react'
+import { Toaster } from 'react-hot-toast'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Film, Music, Type, Sparkles, Wand2, Sticker, Image, Layers,
   ChevronLeft, ChevronRight, Menu, X,
-  Undo2, Redo2, Scissors, Trash2, Copy, FlipHorizontal,
-  ZoomIn, ZoomOut, Play, Pause, SkipBack, SkipForward,
-  Volume2, VolumeX, Maximize2, Download, Settings,
-  FolderOpen, Search, Plus, Camera, Mic, Upload,
-  AlignJustify, Sliders, Palette, Clock, Zap
+  Undo2, Redo2, Scissors, Trash2, Copy,
+  ZoomIn, ZoomOut, Download, Gauge,
+  AlignJustify, Sliders, Palette, Zap, Globe, LogOut, User
 } from 'lucide-react'
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
-import TopBar from './components/Toolbar/TopBar.jsx'
-import SidebarNav from './components/Sidebar/SidebarNav.jsx'
-import SidePanel from './components/Sidebar/SidePanel.jsx'
-import PreviewPlayer from './components/Preview/PreviewPlayer.jsx'
-import Timeline from './components/Timeline/Timeline.jsx'
-import ExportModal from './components/Export/ExportModal.jsx'
-import MobileToolbar from './components/Toolbar/MobileToolbar.jsx'
+import TopBar         from './components/Toolbar/TopBar.jsx'
+import SidebarNav     from './components/Sidebar/SidebarNav.jsx'
+import SidePanel      from './components/Sidebar/SidePanel.jsx'
+import PreviewPlayer  from './components/Preview/PreviewPlayer.jsx'
+import Timeline       from './components/Timeline/Timeline.jsx'
+import ExportModal    from './components/Export/ExportModal.jsx'
+import MobileToolbar  from './components/Toolbar/MobileToolbar.jsx'
+import LoginPage      from './components/Auth/LoginPage.jsx'
 
-// ─── Store ────────────────────────────────────────────────────────────────────
-import { useEditorStore } from './store/editorStore.js'
+import { useEditorStore }        from './store/editorStore.js'
+import { useKeyboardShortcuts }  from './hooks/useKeyboardShortcuts.js'
+import { useMediaQuery }         from './hooks/useMediaQuery.js'
+import { useWebSocketConnection } from './hooks/useWebSocket.js'
+import { useAuth }               from './hooks/useAuth.js'
+import { useTimeline }           from './hooks/useTimeline.js'
 
-// ─── Hooks ────────────────────────────────────────────────────────────────────
-import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts.js'
-import { useMediaQuery } from './hooks/useMediaQuery.js'
-
-// ─── Constants ───────────────────────────────────────────────────────────────
 const PANEL_MIN_WIDTH = 220
 const PANEL_MAX_WIDTH = 380
-const TIMELINE_MIN_HEIGHT = 140
-const TIMELINE_MAX_HEIGHT = 420
+const TIMELINE_MIN_H  = 140
+const TIMELINE_MAX_H  = 520
 
 export default function App() {
   const {
-    activePanel,
-    setActivePanel,
-    isPlaying,
-    exportModalOpen,
-    setExportModalOpen,
-    timelineHeight,
-    setTimelineHeight,
-    panelWidth,
-    setPanelWidth,
-    sidePanelOpen,
-    setSidePanelOpen,
+    activePanel, setActivePanel,
+    exportModalOpen, setExportModalOpen,
+    timelineHeight, setTimelineHeight,
+    panelWidth, setPanelWidth,
+    sidePanelOpen, setSidePanelOpen,
   } = useEditorStore()
 
   const isMobile = useMediaQuery('(max-width: 768px)')
   const isTablet = useMediaQuery('(max-width: 1024px)')
 
-  // Register keyboard shortcuts
+  // ── Auth ───────────────────────────────────────────────────────────────────
+  const { user, loading, submitting, isAuthenticated, login, register, logout } = useAuth()
+
+  // ── WebSocket (only when authenticated) ───────────────────────────────────
+  const accessToken = useEditorStore((s) => s.accessToken)
+  useWebSocketConnection(accessToken)
+
+  // ── Timeline auto-save ─────────────────────────────────────────────────────
+  // TODO: set activeProjectId when user opens a project
+  const activeProjectId = useEditorStore((s) => s.activeProjectId || null)
+  const { saving, lastSaved, saveTimeline } = useTimeline(activeProjectId, isAuthenticated)
+
+  // ── Keyboard shortcuts ─────────────────────────────────────────────────────
   useKeyboardShortcuts()
 
-  // ─── Timeline vertical resize ───────────────────────────────────────────────
-  const timelineResizeRef = useRef(null)
-  const isResizingTimeline = useRef(false)
-  const resizeStartY = useRef(0)
-  const resizeStartHeight = useRef(0)
+  // ── Panel resize ───────────────────────────────────────────────────────────
+  const panelResizeRef   = useRef(false)
+  const timelineResizeRef = useRef(false)
 
-  const handleTimelineResizeStart = useCallback((e) => {
-    isResizingTimeline.current = true
-    resizeStartY.current = e.clientY
-    resizeStartHeight.current = timelineHeight
-    document.body.style.cursor = 'row-resize'
-    document.body.style.userSelect = 'none'
-  }, [timelineHeight])
+  const onPanelMouseDown = useCallback(() => { panelResizeRef.current = true }, [])
 
   useEffect(() => {
-    const onMouseMove = (e) => {
-      if (!isResizingTimeline.current) return
-      const delta = resizeStartY.current - e.clientY
-      const newHeight = Math.min(TIMELINE_MAX_HEIGHT, Math.max(TIMELINE_MIN_HEIGHT, resizeStartHeight.current + delta))
-      setTimelineHeight(newHeight)
+    const onMove = (e) => {
+      if (panelResizeRef.current) {
+        const newW = e.clientX - 48
+        setPanelWidth(Math.min(PANEL_MAX_WIDTH, Math.max(PANEL_MIN_WIDTH, newW)))
+      }
+      if (timelineResizeRef.current) {
+        const newH = window.innerHeight - e.clientY
+        setTimelineHeight(Math.min(TIMELINE_MAX_H, Math.max(TIMELINE_MIN_H, newH)))
+      }
     }
-    const onMouseUp = () => {
-      if (!isResizingTimeline.current) return
-      isResizingTimeline.current = false
-      document.body.style.cursor = ''
-      document.body.style.userSelect = ''
+    const onUp = () => {
+      panelResizeRef.current   = false
+      timelineResizeRef.current = false
     }
-    window.addEventListener('mousemove', onMouseMove)
-    window.addEventListener('mouseup', onMouseUp)
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
     return () => {
-      window.removeEventListener('mousemove', onMouseMove)
-      window.removeEventListener('mouseup', onMouseUp)
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
     }
-  }, [setTimelineHeight])
+  }, [setPanelWidth, setTimelineHeight])
 
-  // ─── Panel horizontal resize ────────────────────────────────────────────────
-  const isPanelResizing = useRef(false)
-  const panelResizeStartX = useRef(0)
-  const panelResizeStartWidth = useRef(0)
-
-  const handlePanelResizeStart = useCallback((e) => {
-    isPanelResizing.current = true
-    panelResizeStartX.current = e.clientX
-    panelResizeStartWidth.current = panelWidth
-    document.body.style.cursor = 'col-resize'
-    document.body.style.userSelect = 'none'
-  }, [panelWidth])
-
-  useEffect(() => {
-    const onMouseMove = (e) => {
-      if (!isPanelResizing.current) return
-      const delta = e.clientX - panelResizeStartX.current
-      const newWidth = Math.min(PANEL_MAX_WIDTH, Math.max(PANEL_MIN_WIDTH, panelResizeStartWidth.current + delta))
-      setPanelWidth(newWidth)
-    }
-    const onMouseUp = () => {
-      if (!isPanelResizing.current) return
-      isPanelResizing.current = false
-      document.body.style.cursor = ''
-      document.body.style.userSelect = ''
-    }
-    window.addEventListener('mousemove', onMouseMove)
-    window.addEventListener('mouseup', onMouseUp)
-    return () => {
-      window.removeEventListener('mousemove', onMouseMove)
-      window.removeEventListener('mouseup', onMouseUp)
-    }
-  }, [setPanelWidth])
-
-  // ─── Mobile layout ───────────────────────────────────────────────────────────
-  if (isMobile) {
+  // ── Loading screen ─────────────────────────────────────────────────────────
+  if (loading) {
     return (
-      <MobileLayout
-        exportModalOpen={exportModalOpen}
-        setExportModalOpen={setExportModalOpen}
-        activePanel={activePanel}
-        setActivePanel={setActivePanel}
-      />
+      <div className="min-h-screen bg-[#0A0F1E] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <Film className="w-10 h-10 text-cyan-400 animate-pulse" />
+          <p className="text-white/40 text-sm">Loading EditFrame…</p>
+        </div>
+      </div>
     )
   }
 
-  // ─── Desktop/Tablet layout ───────────────────────────────────────────────────
+  // ── Login page ─────────────────────────────────────────────────────────────
+  if (!isAuthenticated) {
+    return (
+      <>
+        <Toaster position="top-right" toastOptions={{ style: { background: '#0D1526', color: '#E8EDF7', border: '1px solid rgba(255,255,255,0.1)' } }} />
+        <LoginPage onLogin={login} onRegister={register} submitting={submitting} />
+      </>
+    )
+  }
+
+  // ── Editor (authenticated) ─────────────────────────────────────────────────
   return (
-    <div
-      className="flex flex-col w-full h-full bg-navy-900 overflow-hidden select-none"
-      style={{ '--timeline-height': `${timelineHeight}px` }}
-    >
-      {/* ── Top Bar ── */}
+    <div className="flex flex-col h-screen bg-[#0A0F1E] text-white overflow-hidden">
+      <Toaster position="top-right" toastOptions={{ style: { background: '#0D1526', color: '#E8EDF7', border: '1px solid rgba(255,255,255,0.1)' } }} />
+
+      {isMobile ? (
+        <MobileLayout
+          user={user}
+          onLogout={logout}
+          exportModalOpen={exportModalOpen}
+          setExportModalOpen={setExportModalOpen}
+          activePanel={activePanel}
+          setActivePanel={setActivePanel}
+        />
+      ) : (
+        <DesktopLayout
+          user={user}
+          onLogout={logout}
+          saving={saving}
+          lastSaved={lastSaved}
+          onSave={() => saveTimeline('Manual save')}
+          activePanel={activePanel}
+          setActivePanel={setActivePanel}
+          sidePanelOpen={sidePanelOpen}
+          setSidePanelOpen={setSidePanelOpen}
+          panelWidth={panelWidth}
+          onPanelMouseDown={onPanelMouseDown}
+          timelineHeight={timelineHeight}
+          timelineResizeRef={timelineResizeRef}
+          exportModalOpen={exportModalOpen}
+          setExportModalOpen={setExportModalOpen}
+          isTablet={isTablet}
+        />
+      )}
+    </div>
+  )
+}
+
+// ─── Desktop Layout ───────────────────────────────────────────────────────────
+
+function DesktopLayout({
+  user, onLogout, saving, lastSaved, onSave,
+  activePanel, setActivePanel,
+  sidePanelOpen, setSidePanelOpen,
+  panelWidth, onPanelMouseDown,
+  timelineHeight, timelineResizeRef,
+  exportModalOpen, setExportModalOpen,
+  isTablet,
+}) {
+  return (
+    <>
+      {/* Top bar */}
       <TopBar
+        user={user}
+        onLogout={onLogout}
+        saving={saving}
+        lastSaved={lastSaved}
+        onSave={onSave}
         onExport={() => setExportModalOpen(true)}
-        isTablet={isTablet}
       />
 
-      {/* ── Main workspace ── */}
+      {/* Main area */}
       <div className="flex flex-1 overflow-hidden">
-
-        {/* ── Icon sidebar (always visible) ── */}
+        {/* Sidebar icon strip */}
         <SidebarNav
           activePanel={activePanel}
-          onPanelSelect={(id) => {
-            if (activePanel === id && sidePanelOpen) {
-              setSidePanelOpen(false)
-            } else {
-              setActivePanel(id)
-              setSidePanelOpen(true)
-            }
-          }}
+          setActivePanel={setActivePanel}
+          sidePanelOpen={sidePanelOpen}
+          setSidePanelOpen={setSidePanelOpen}
         />
 
-        {/* ── Slide-out content panel ── */}
-        <AnimatePresence initial={false}>
-          {sidePanelOpen && (
+        {/* Side panel */}
+        <AnimatePresence>
+          {sidePanelOpen && !isTablet && (
             <motion.div
-              key="side-panel"
               initial={{ width: 0, opacity: 0 }}
               animate={{ width: panelWidth, opacity: 1 }}
               exit={{ width: 0, opacity: 0 }}
-              transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
-              className="relative flex-shrink-0 overflow-hidden"
+              transition={{ duration: 0.2 }}
+              className="flex-shrink-0 border-r border-white/5 bg-[#0D1526] overflow-hidden relative"
               style={{ width: panelWidth }}
             >
               <SidePanel activePanel={activePanel} />
-
-              {/* Panel resize handle */}
+              {/* Resize handle */}
               <div
-                onMouseDown={handlePanelResizeStart}
-                className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize
-                           hover:bg-cyan-brand/40 active:bg-cyan-brand/60
-                           transition-colors duration-150 z-panel"
-                title="Drag to resize panel"
+                className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-cyan-500/30 transition-colors"
+                onMouseDown={onPanelMouseDown}
               />
             </motion.div>
           )}
         </AnimatePresence>
 
-        {/* ── Center: Preview + Timeline ── */}
-        <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-
-          {/* Preview player */}
-          <div
-            className="flex-1 overflow-hidden"
-            style={{ minHeight: 0 }}
-          >
+        {/* Preview + Timeline column */}
+        <div className="flex flex-col flex-1 overflow-hidden">
+          {/* Preview */}
+          <div className="flex-1 overflow-hidden">
             <PreviewPlayer />
           </div>
 
           {/* Timeline resize handle */}
           <div
-            ref={timelineResizeRef}
-            onMouseDown={handleTimelineResizeStart}
-            className="h-1.5 cursor-row-resize bg-navy-950 hover:bg-cyan-brand/30
-                       active:bg-cyan-brand/50 transition-colors duration-150
-                       flex items-center justify-center group shrink-0"
-            title="Drag to resize timeline"
-          >
-            <div className="w-12 h-0.5 rounded-full bg-border-default group-hover:bg-cyan-brand/50 transition-colors duration-150" />
-          </div>
+            className="h-1 bg-white/5 hover:bg-cyan-500/30 cursor-row-resize transition-colors flex-shrink-0"
+            onMouseDown={() => { timelineResizeRef.current = true }}
+          />
 
           {/* Timeline */}
-          <div
-            className="shrink-0 overflow-hidden border-t border-border-subtle"
-            style={{ height: timelineHeight }}
-          >
+          <div className="flex-shrink-0 border-t border-white/5" style={{ height: timelineHeight }}>
             <Timeline />
           </div>
         </div>
       </div>
 
-      {/* ── Export Modal ── */}
-      <AnimatePresence>
-        {exportModalOpen && (
-          <ExportModal onClose={() => setExportModalOpen(false)} />
-        )}
-      </AnimatePresence>
-    </div>
+      {/* Export modal */}
+      <ExportModal />
+    </>
   )
 }
 
-// ─── Mobile Layout ─────────────────────────────────────────────────────────────
-function MobileLayout({ exportModalOpen, setExportModalOpen, activePanel, setActivePanel }) {
-  const [mobileView, setMobileView] = useState('preview') // 'preview' | 'timeline' | 'panel'
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+// ─── Mobile Layout ────────────────────────────────────────────────────────────
+
+function MobileLayout({ user, onLogout, exportModalOpen, setExportModalOpen, activePanel, setActivePanel }) {
+  const [mobileTab, setMobileTab] = useState('preview')
 
   return (
-    <div className="flex flex-col w-full h-full bg-navy-900 overflow-hidden">
-
+    <div className="flex flex-col h-full">
       {/* Mobile top bar */}
-      <div
-        className="flex items-center justify-between px-3 shrink-0 border-b border-border-subtle bg-navy-800"
-        style={{ height: 48, paddingTop: 'env(safe-area-inset-top)' }}
-      >
+      <div className="flex items-center justify-between px-3 py-2 border-b border-white/5 bg-[#0D1526]">
         <div className="flex items-center gap-2">
-          <button
-            className="btn-icon"
-            onClick={() => setMobileMenuOpen(true)}
-          >
-            <Menu size={18} />
-          </button>
-          <span className="font-display font-700 text-base text-text-primary tracking-tight">
-            Edit<span className="text-cyan-brand">Frame</span>
-          </span>
+          <Film className="w-5 h-5 text-cyan-400" />
+          <span className="text-sm font-semibold text-white">EditFrame</span>
         </div>
-
-        <div className="flex items-center gap-1">
-          <button className="btn-icon">
-            <Undo2 size={16} />
+        <div className="flex items-center gap-2">
+          <button onClick={() => setExportModalOpen(true)} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-cyan-500/20 text-cyan-400 text-xs border border-cyan-500/30">
+            <Download className="w-3 h-3" /> Export
           </button>
-          <button className="btn-icon">
-            <Redo2 size={16} />
-          </button>
-          <button
-            className="btn-primary text-xs py-1 px-2.5"
-            onClick={() => setExportModalOpen(true)}
-          >
-            <Download size={13} />
-            Export
+          <button onClick={onLogout} className="p-1.5 rounded-lg text-white/40 hover:text-white/60">
+            <LogOut className="w-4 h-4" />
           </button>
         </div>
       </div>
 
-      {/* Mobile view switcher tabs */}
-      <div className="flex border-b border-border-subtle bg-navy-800 shrink-0">
-        {[
-          { id: 'preview', label: 'Preview' },
-          { id: 'timeline', label: 'Timeline' },
-          { id: 'panel', label: activePanel || 'Tools' },
-        ].map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setMobileView(tab.id)}
-            className={`flex-1 py-2 text-xs font-ui font-500 capitalize transition-colors duration-150
-                       ${mobileView === tab.id
-                         ? 'text-cyan-brand border-b-2 border-cyan-brand bg-cyan-brand/5'
-                         : 'text-text-muted hover:text-text-secondary'
-                       }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Main content area */}
+      {/* Content */}
       <div className="flex-1 overflow-hidden">
-        {mobileView === 'preview' && <PreviewPlayer mobile />}
-        {mobileView === 'timeline' && <Timeline mobile />}
-        {mobileView === 'panel' && (
-          <SidePanel activePanel={activePanel} mobile />
-        )}
+        {mobileTab === 'preview'  && <PreviewPlayer />}
+        {mobileTab === 'timeline' && <Timeline />}
+        {mobileTab === 'panel'    && <div className="h-full bg-[#0D1526]"><SidePanel activePanel={activePanel} /></div>}
       </div>
 
-      {/* Mobile bottom toolbar */}
+      {/* Mobile bottom nav */}
       <MobileToolbar
+        mobileTab={mobileTab}
+        setMobileTab={setMobileTab}
         activePanel={activePanel}
-        onPanelSelect={(id) => {
-          setActivePanel(id)
-          setMobileView('panel')
-        }}
-        onExport={() => setExportModalOpen(true)}
+        setActivePanel={setActivePanel}
       />
 
-      {/* Mobile slide-up menu */}
-      <AnimatePresence>
-        {mobileMenuOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-modal-backdrop bg-navy-950/80 backdrop-blur-sm"
-            onClick={() => setMobileMenuOpen(false)}
-          >
-            <motion.div
-              initial={{ x: -280 }}
-              animate={{ x: 0 }}
-              exit={{ x: -280 }}
-              transition={{ ease: [0.4, 0, 0.2, 1], duration: 0.25 }}
-              className="absolute left-0 top-0 bottom-0 w-64 bg-navy-800 border-r border-border-subtle p-4"
-              onClick={e => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between mb-6">
-                <span className="font-display font-700 text-xl text-text-primary">
-                  Edit<span className="text-cyan-brand">Frame</span>
-                </span>
-                <button className="btn-icon" onClick={() => setMobileMenuOpen(false)}>
-                  <X size={16} />
-                </button>
-              </div>
-              <MobileMenuItems onClose={() => setMobileMenuOpen(false)} />
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Export Modal */}
-      <AnimatePresence>
-        {exportModalOpen && (
-          <ExportModal onClose={() => setExportModalOpen(false)} mobile />
-        )}
-      </AnimatePresence>
+      <ExportModal />
     </div>
-  )
-}
-
-// ─── Mobile menu content ───────────────────────────────────────────────────────
-function MobileMenuItems({ onClose }) {
-  const items = [
-    { icon: FolderOpen, label: 'Open Project', shortcut: 'Ctrl+O' },
-    { icon: Plus, label: 'New Project', shortcut: 'Ctrl+N' },
-    { icon: Upload, label: 'Import Media', shortcut: 'Ctrl+I' },
-    { icon: Download, label: 'Export Video', shortcut: 'Ctrl+E' },
-    { icon: Copy, label: 'Duplicate Project', shortcut: '' },
-    { icon: Settings, label: 'Settings', shortcut: ',' },
-  ]
-  return (
-    <nav className="flex flex-col gap-0.5">
-      {items.map(({ icon: Icon, label, shortcut }) => (
-        <button
-          key={label}
-          onClick={onClose}
-          className="flex items-center justify-between px-3 py-2.5 rounded-md
-                     text-text-secondary hover:bg-surface-hover hover:text-text-primary
-                     transition-colors duration-150 group"
-        >
-          <span className="flex items-center gap-3">
-            <Icon size={16} className="text-text-muted group-hover:text-cyan-brand transition-colors duration-150" />
-            <span className="text-sm font-ui">{label}</span>
-          </span>
-          {shortcut && <span className="kbd">{shortcut}</span>}
-        </button>
-      ))}
-    </nav>
   )
 }

@@ -1,108 +1,117 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // src/config/redis.js
-// ioredis client singleton shared by BullMQ queues, workers, and any
-// direct Redis operations (caching, session flags, etc.).
+// ioredis client singleton. Soft-fails if Redis is not available so the
+// API server can boot without Redis (queue features disabled).
 // ─────────────────────────────────────────────────────────────────────────────
 
 import Redis from 'ioredis';
 
-// ─── Build connection options from env ───────────────────────────────────────
-
 function buildRedisOptions() {
-  // If a full REDIS_URL is provided, ioredis parses it automatically
-  if (process.env.REDIS_URL) {
-    return process.env.REDIS_URL;
-  }
+  if (process.env.REDIS_URL) return process.env.REDIS_URL;
 
-  const options = {
-    host:     process.env.REDIS_HOST     || '127.0.0.1',
+  return {
+    host:     process.env.REDIS_HOST || '127.0.0.1',
     port:     parseInt(process.env.REDIS_PORT || '6379', 10),
     db:       parseInt(process.env.REDIS_DB   || '0',    10),
-    // Retry strategy: exponential back-off, max 10 retries
+    // Stop retrying after 3 attempts so the server doesn't hang on startup
     retryStrategy(times) {
-      if (times > 10) {
-        console.error('[Redis] Max reconnection attempts reached. Giving up.');
-        return null; // stop retrying
-      }
-      const delay = Math.min(times * 200, 3000);
-      console.warn(`[Redis] Reconnecting… attempt ${times} (delay ${delay}ms)`);
-      return delay;
+      if (times > 3) return null; // stop retrying
+      return Math.min(times * 500, 2000);
     },
-    // Required by BullMQ — do not set maxRetriesPerRequest globally
     maxRetriesPerRequest: null,
-    enableReadyCheck: false,
+    enableReadyCheck:     false,
+    lazyConnect:          true, // don't connect until connectRedis() is called
   };
-
-  if (process.env.REDIS_PASSWORD) {
-    options.password = process.env.REDIS_PASSWORD;
-  }
-
-  return options;
 }
 
-// ─── Singleton ────────────────────────────────────────────────────────────────
-
-let redisClient;
+let redisClient = null;
+let redisAvailable = false;
 
 /**
- * Returns the shared ioredis client, creating it on first call.
- * BullMQ requires a fresh Redis instance per queue/worker, so this is used
- * for general operations. Queues/workers create their own instances via
- * `createRedisConnection()`.
- *
+ * Returns the shared ioredis client.
  * @returns {Redis}
  */
 export function getRedisClient() {
   if (!redisClient) {
     redisClient = new Redis(buildRedisOptions());
 
-    redisClient.on('connect', () => {
-      console.log('[Redis] Client connected');
-    });
-
     redisClient.on('ready', () => {
+      redisAvailable = true;
       console.log('[Redis] Client ready');
     });
 
     redisClient.on('error', (err) => {
-      console.error('[Redis] Client error:', err.message);
+      // Only log once, not every retry
+      if (redisAvailable) {
+        console.error('[Redis] Client error:', err.message);
+        redisAvailable = false;
+      }
     });
 
     redisClient.on('close', () => {
-      console.warn('[Redis] Connection closed');
+      redisAvailable = false;
     });
   }
-
   return redisClient;
 }
 
 /**
  * Create a dedicated ioredis connection for BullMQ.
- * BullMQ requires each Queue and Worker to have its own connection
- * (they cannot share a single client).
- *
- * @returns {Redis}
+ * Returns null if Redis is not available.
+ * @returns {Redis|null}
  */
 export function createRedisConnection() {
   return new Redis(buildRedisOptions());
 }
 
 /**
- * Connect to Redis (validates connection at startup).
+ * Returns true if Redis is currently connected.
+ * @returns {boolean}
+ */
+export function isRedisAvailable() {
+  return redisAvailable;
+}
+
+/**
+ * Connect to Redis at startup.
+ * Soft-fails with a warning if Redis is not available.
+ * Queue features (video processing, export, AI) will be disabled.
+ *
  * @returns {Promise<void>}
  */
 export async function connectRedis() {
   const client = getRedisClient();
 
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
+    // Already connected
     if (client.status === 'ready') {
+      redisAvailable = true;
       return resolve();
     }
 
-    client.once('ready', resolve);
-    client.once('error', (err) => {
-      // Only reject if we haven't connected yet
-      if (client.status !== 'ready') reject(err);
+    const timeout = setTimeout(() => {
+      console.warn(
+        '[Redis] Connection timed out — Redis is not running.\n' +
+        '        Queue features (video processing, export jobs, AI jobs) will be unavailable.\n' +
+        '        Install Redis to enable them: https://redis.io/docs/getting-started/\n' +
+        '        On Windows use: https://github.com/microsoftarchive/redis/releases\n' +
+        '        Or run via Docker: docker run -d -p 6379:6379 redis:7'
+      );
+      resolve(); // resolve instead of reject — server continues without Redis
+    }, 3000);
+
+    client.connect().then(() => {
+      clearTimeout(timeout);
+      redisAvailable = true;
+      resolve();
+    }).catch(() => {
+      clearTimeout(timeout);
+      console.warn(
+        '[Redis] Could not connect — Redis is not running.\n' +
+        '        Queue features (video processing, export jobs, AI jobs) will be unavailable.\n' +
+        '        Install Redis to enable them, or run: docker run -d -p 6379:6379 redis:7'
+      );
+      resolve(); // resolve — don't crash the server
     });
   });
 }
@@ -113,8 +122,13 @@ export async function connectRedis() {
  */
 export async function disconnectRedis() {
   if (redisClient) {
-    await redisClient.quit();
+    try {
+      await redisClient.quit();
+    } catch (_) {
+      redisClient.disconnect();
+    }
     redisClient = null;
+    redisAvailable = false;
     console.log('[Redis] Disconnected');
   }
 }
