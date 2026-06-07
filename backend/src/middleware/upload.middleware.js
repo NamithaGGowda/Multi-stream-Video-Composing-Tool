@@ -38,11 +38,16 @@ const ALLOWED_AUDIO_TYPES = [
 
 const ALLOWED_IMAGE_TYPES = [
   'image/jpeg',
+  'image/jpg',
   'image/png',
   'image/webp',
   'image/gif',
   'image/bmp',
   'image/tiff',
+  'image/avif',
+  'image/heic',
+  'image/heif',
+  'image/svg+xml',
 ];
 
 const ALLOWED_MEDIA_TYPES = [
@@ -53,8 +58,12 @@ const ALLOWED_MEDIA_TYPES = [
 
 const ALLOWED_AVATAR_TYPES = [
   'image/jpeg',
+  'image/jpg',
   'image/png',
   'image/webp',
+  'image/avif',
+  'image/heic',
+  'image/heif',
 ];
 
 // ─── File size limits ─────────────────────────────────────────────────────────

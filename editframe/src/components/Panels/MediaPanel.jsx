@@ -1,240 +1,334 @@
-import React, { useRef } from 'react'
-import {
-  Upload, Search, Film, Music, Image, Plus,
-  MoreHorizontal, Clock, HardDrive, Play, ChevronDown
-} from 'lucide-react'
-import { useEditorStore } from '../../store/editorStore.js'
+import { useState, useRef, useCallback } from 'react';
+import { Upload, Search, Film, Music, Image, X,
+         Plus, Trash2, HardDrive, RefreshCw, AlertCircle, Eye } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useEditorStore } from '../../store/editorStore.js';
+import { useMedia } from '../../hooks/useMedia.js';
+import toast from 'react-hot-toast';
+import AssetPreviewModal from '../Media/AssetPreviewModal.jsx';
 
-const FILTER_TABS = [
-  { id: 'all', label: 'All' },
-  { id: 'video', label: 'Video' },
-  { id: 'audio', label: 'Audio' },
-  { id: 'image', label: 'Image' },
-]
+const TYPE_TABS = [
+  { id: null,    label: 'All'   },
+  { id: 'VIDEO', label: 'Video' },
+  { id: 'AUDIO', label: 'Audio' },
+  { id: 'IMAGE', label: 'Image' },
+];
 
-function TypeIcon({ type, size = 12 }) {
-  if (type === 'video') return <Film size={size} className="text-blue-400" />
-  if (type === 'audio') return <Music size={size} className="text-emerald-400" />
-  return <Image size={size} className="text-purple-400" />
+function formatDuration(secs) {
+  if (!secs) return null;
+  const m = Math.floor(secs / 60);
+  const s = Math.floor(secs % 60);
+  return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-function formatDuration(s) {
-  if (!s) return '--'
-  const m = Math.floor(s / 60)
-  const sec = Math.floor(s % 60)
-  return m > 0 ? `${m}:${sec.toString().padStart(2, '0')}` : `${sec}s`
+function formatSize(mb) {
+  if (!mb) return null;
+  return mb < 1 ? `${Math.round(mb * 1000)}KB` : `${mb.toFixed(1)}MB`;
 }
+
+// ─── Asset card ───────────────────────────────────────────────────────────────
+
+function AssetCard({ asset, onPreview, onAddToTimeline, onDelete }) {
+  const [hovered, setHovered] = useState(false);
+
+  const typeColor = {
+    VIDEO: 'text-cyan-400 bg-cyan-500/15',
+    AUDIO: 'text-purple-400 bg-purple-500/15',
+    IMAGE: 'text-blue-400 bg-blue-500/15',
+  }[asset.type] || 'text-white/40 bg-white/5';
+
+  const TypeIcon = asset.type === 'VIDEO' ? Film :
+                   asset.type === 'AUDIO' ? Music : Image;
+
+  return (
+    <motion.div
+      className="group relative rounded-lg overflow-hidden border border-white/8 hover:border-cyan-500/40 transition-all cursor-pointer bg-[#0D1526]"
+      onHoverStart={() => setHovered(true)}
+      onHoverEnd={() => setHovered(false)}
+      whileHover={{ y: -1 }}
+      onClick={() => onPreview(asset)}
+    >
+      {/* Thumbnail */}
+      <div className="aspect-video relative overflow-hidden bg-[#0A0F1E]">
+        {asset.thumbnailUrl ? (
+          <img src={asset.thumbnailUrl} alt={asset.name} className="w-full h-full object-cover" />
+        ) : (
+          <div className={`w-full h-full flex items-center justify-center`}>
+            <div className={`p-2.5 rounded-xl ${typeColor}`}>
+              <TypeIcon className="w-5 h-5" />
+            </div>
+          </div>
+        )}
+
+        {/* Duration */}
+        {asset.duration && (
+          <span className="absolute bottom-1 left-1 text-[9px] font-mono bg-black/70 text-white/80 px-1 rounded">
+            {formatDuration(asset.duration)}
+          </span>
+        )}
+
+        {/* Type badge */}
+        <span className={`absolute top-1 left-1 text-[9px] font-bold px-1.5 py-0.5 rounded flex items-center gap-0.5 ${typeColor}`}>
+          <TypeIcon className="w-2.5 h-2.5" /> {asset.type}
+        </span>
+
+        {/* Hover overlay */}
+        <AnimatePresence>
+          {hovered && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/60 flex items-center justify-center gap-2"
+            >
+              {/* Preview button */}
+              <button
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 text-white text-[11px] font-medium transition-colors"
+                onClick={(e) => { e.stopPropagation(); onPreview(asset); }}
+              >
+                <Eye className="w-3 h-3" /> View
+              </button>
+              {/* Add to timeline */}
+              <button
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-cyan-500/80 hover:bg-cyan-400 text-white text-[11px] font-medium transition-colors"
+                onClick={(e) => { e.stopPropagation(); onAddToTimeline(asset); }}
+              >
+                <Plus className="w-3 h-3" /> Add
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      {/* Info */}
+      <div className="px-2 py-1.5">
+        <p className="text-[11px] text-white/80 truncate font-medium">{asset.name}</p>
+        <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-white/30">
+          {asset.fileSizeMb && (
+            <span className="flex items-center gap-0.5">
+              <HardDrive className="w-2.5 h-2.5" />
+              {formatSize(asset.fileSizeMb)}
+            </span>
+          )}
+          {asset.width && asset.height && (
+            <span>{asset.width}×{asset.height}</span>
+          )}
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+// ─── Upload zone ──────────────────────────────────────────────────────────────
+
+function UploadZone({ onFiles, uploading, uploadProgress }) {
+  const inputRef = useRef();
+  const [dragging, setDragging] = useState(false);
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setDragging(false);
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length) onFiles(files);
+  };
+
+  return (
+    <div
+      className={`border-2 border-dashed rounded-xl p-4 text-center transition-all cursor-pointer ${
+        dragging ? 'border-cyan-500/70 bg-cyan-500/10' : 'border-white/10 hover:border-white/20 hover:bg-white/3'
+      }`}
+      onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+      onDragLeave={() => setDragging(false)}
+      onDrop={handleDrop}
+      onClick={() => !uploading && inputRef.current?.click()}
+    >
+      <input
+        ref={inputRef}
+        type="file"
+        multiple
+        accept="video/*,audio/*,image/*"
+        className="hidden"
+        onChange={(e) => onFiles(Array.from(e.target.files))}
+      />
+      {uploading ? (
+        <div className="py-1">
+          <div className="w-full bg-white/10 rounded-full h-1.5 mb-2">
+            <div className="bg-cyan-400 h-1.5 rounded-full transition-all" style={{ width: `${uploadProgress}%` }} />
+          </div>
+          <p className="text-xs text-cyan-400 font-medium">Uploading… {uploadProgress}%</p>
+        </div>
+      ) : (
+        <>
+          <Upload className="w-5 h-5 text-white/30 mx-auto mb-1.5" />
+          <p className="text-xs text-white/50">
+            Drop files or <span className="text-cyan-400">browse</span>
+          </p>
+          <p className="text-[10px] text-white/25 mt-0.5">Video · Audio · Image</p>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─── Main panel ───────────────────────────────────────────────────────────────
 
 export default function MediaPanel() {
+  const addMediaItem    = useEditorStore((s) => s.addMediaItem);
+  const isAuthenticated = !!useEditorStore((s) => s.accessToken);
+
   const {
-    mediaItems, mediaSearch, mediaFilter, selectedMediaId,
-    setMediaSearch, setMediaFilter, setSelectedMedia,
-    addMediaToTimeline, addMediaItem,
-  } = useEditorStore()
+    assets, loading, uploading, uploadProgress,
+    typeFilter, setTypeFilter,
+    loadAssets, uploadFile, uploadFiles, deleteAsset,
+  } = useMedia(isAuthenticated);
 
-  const fileInputRef = useRef(null)
+  const [search, setSearch]           = useState('');
+  const [previewAsset, setPreviewAsset] = useState(null);
+  const [previewIndex, setPreviewIndex] = useState(0);
 
-  const filtered = mediaItems.filter(item => {
-    const matchType = mediaFilter === 'all' || item.type === mediaFilter
-    const matchSearch = !mediaSearch || item.name.toLowerCase().includes(mediaSearch.toLowerCase())
-    return matchType && matchSearch
-  })
+  const filtered = assets.filter((a) =>
+    !search || a.name.toLowerCase().includes(search.toLowerCase())
+  );
 
-  const handleFileImport = (e) => {
-    Array.from(e.target.files || []).forEach(file => {
-      const type = file.type.startsWith('video/') ? 'video'
-                 : file.type.startsWith('audio/') ? 'audio'
-                 : 'image'
-      addMediaItem({
-        type,
-        name: file.name,
-        size: `${(file.size / 1024 / 1024).toFixed(1)} MB`,
-        duration: type === 'image' ? undefined : 10,
-        fps: type === 'video' ? 30 : undefined,
-      })
-    })
-    e.target.value = ''
-  }
+  const handleFiles = useCallback(async (files) => {
+    if (!isAuthenticated) { toast.error('Please log in to upload files'); return; }
+    if (files.length === 1) {
+      await uploadFile(files[0]);
+    } else {
+      await uploadFiles(files);
+    }
+  }, [isAuthenticated, uploadFile, uploadFiles]);
+
+  const handlePreview = useCallback((asset) => {
+    const idx = filtered.findIndex((a) => a.id === asset.id);
+    setPreviewIndex(idx >= 0 ? idx : 0);
+    setPreviewAsset(asset);
+  }, [filtered]);
+
+  const handleAddToTimeline = useCallback((asset) => {
+    addMediaItem({
+      id:            asset.id,
+      name:          asset.name,
+      type:          asset.type.toLowerCase(),
+      duration:      asset.duration || 5,
+      thumbnail:     asset.thumbnailUrl || null,
+      cloudinaryUrl: asset.cloudinarySecureUrl || asset.cloudinaryUrl,
+    });
+    toast.success(`${asset.name} added to timeline`);
+  }, [addMediaItem]);
+
+  const navigatePreview = useCallback((direction) => {
+    const newIndex = previewIndex + direction;
+    if (newIndex >= 0 && newIndex < filtered.length) {
+      setPreviewIndex(newIndex);
+      setPreviewAsset(filtered[newIndex]);
+    }
+  }, [previewIndex, filtered]);
 
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="panel-header">
-        <span className="panel-title">Media Library</span>
-        <div className="flex items-center gap-1">
-          <button
-            className="btn-primary text-xs py-1 px-2"
-            onClick={() => fileInputRef.current?.click()}
-            title="Import media files"
-          >
-            <Upload size={11} />
-            Import
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="video/*,audio/*,image/*"
-            multiple
-            className="hidden"
-            onChange={handleFileImport}
-          />
+      <div className="px-3 pt-3 pb-2 border-b border-white/5">
+        <div className="flex items-center justify-between mb-2.5">
+          <span className="text-xs font-semibold text-white/70 tracking-wide uppercase">Media Library</span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] text-white/30">{assets.length} files</span>
+            <button onClick={() => loadAssets()} className="p-1 rounded text-white/30 hover:text-white/60 hover:bg-white/5 transition-colors" title="Refresh">
+              <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
         </div>
-      </div>
 
-      {/* Search */}
-      <div className="px-2.5 py-2 border-b border-border-subtle">
-        <div className="relative">
-          <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
+        <UploadZone onFiles={handleFiles} uploading={uploading} uploadProgress={uploadProgress} />
+
+        <div className="relative mt-2.5">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/25 pointer-events-none" />
           <input
             type="text"
-            placeholder="Search media…"
-            className="ef-input pl-7 text-xs h-7"
-            value={mediaSearch}
-            onChange={e => setMediaSearch(e.target.value)}
+            placeholder="Search files…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full bg-white/5 border border-white/8 rounded-lg pl-8 pr-7 py-1.5 text-xs text-white placeholder-white/20 focus:outline-none focus:border-cyan-500/40 transition-colors"
           />
+          {search && (
+            <button className="absolute right-2 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60" onClick={() => setSearch('')}>
+              <X className="w-3 h-3" />
+            </button>
+          )}
+        </div>
+
+        <div className="flex gap-1 mt-2">
+          {TYPE_TABS.map((tab) => (
+            <button
+              key={String(tab.id)}
+              onClick={() => setTypeFilter(tab.id)}
+              className={`flex-1 py-1 rounded-md text-[10px] font-medium transition-all ${
+                typeFilter === tab.id
+                  ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
+                  : 'text-white/40 hover:bg-white/5 border border-transparent'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* Filter tabs */}
-      <div className="flex border-b border-border-subtle px-2.5 py-1.5 gap-1">
-        {FILTER_TABS.map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setMediaFilter(tab.id)}
-            className={`px-2 py-0.5 text-xs font-ui rounded-sm transition-colors duration-150
-                       ${mediaFilter === tab.id
-                         ? 'bg-surface-overlay text-text-primary border border-border-strong'
-                         : 'text-text-muted hover:text-text-secondary'
-                       }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-        <div className="flex-1" />
-        <span className="text-2xs font-mono text-text-disabled self-center">
-          {filtered.length} file{filtered.length !== 1 ? 's' : ''}
-        </span>
-      </div>
-
-      {/* Media grid */}
-      <div className="flex-1 overflow-y-auto scrollbar-thin p-2.5">
-        {filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-32 gap-3">
-            <div className="w-10 h-10 rounded-full bg-surface-overlay flex items-center justify-center">
-              <Film size={18} className="text-text-disabled" />
-            </div>
-            <p className="text-text-muted text-xs font-ui text-center">
-              {mediaSearch ? 'No results found' : 'Import media to get started'}
-            </p>
-            {!mediaSearch && (
-              <button
-                className="btn-secondary text-xs py-1 px-2.5"
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <Plus size={11} />
-                Add Files
-              </button>
-            )}
+      {/* Grid */}
+      <div className="flex-1 overflow-y-auto scrollbar-hide p-3">
+        {!isAuthenticated && (
+          <div className="flex flex-col items-center justify-center py-10 text-center">
+            <AlertCircle className="w-7 h-7 text-white/20 mb-2" />
+            <p className="text-xs text-white/40">Log in to access your media library</p>
           </div>
-        ) : (
+        )}
+        {isAuthenticated && loading && assets.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-10 gap-2">
+            <RefreshCw className="w-5 h-5 text-cyan-400 animate-spin" />
+            <p className="text-xs text-white/40">Loading your files…</p>
+          </div>
+        )}
+        {isAuthenticated && !loading && filtered.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-10 text-center">
+            <Film className="w-8 h-8 text-white/15 mb-2" />
+            <p className="text-xs text-white/40 font-medium">
+              {search ? 'No files match your search' : 'No files yet'}
+            </p>
+            <p className="text-[10px] text-white/25 mt-1">
+              {search ? 'Try a different term' : 'Upload a video, audio, or image above'}
+            </p>
+          </div>
+        )}
+        {filtered.length > 0 && (
           <div className="grid grid-cols-2 gap-2">
-            {filtered.map(item => (
-              <MediaThumb
-                key={item.id}
-                item={item}
-                selected={selectedMediaId === item.id}
-                onSelect={() => setSelectedMedia(item.id)}
-                onAddToTimeline={() => addMediaToTimeline(item.id)}
+            {filtered.map((asset) => (
+              <AssetCard
+                key={asset.id}
+                asset={asset}
+                onPreview={handlePreview}
+                onAddToTimeline={handleAddToTimeline}
+                onDelete={deleteAsset}
               />
             ))}
           </div>
         )}
-
-        {/* Drop zone */}
-        <div
-          className="mt-2 border border-dashed border-border-default rounded-md p-4
-                     flex flex-col items-center gap-1.5 cursor-pointer
-                     hover:border-cyan-brand/50 hover:bg-cyan-brand/5 transition-colors duration-200"
-          onClick={() => fileInputRef.current?.click()}
-          onDragOver={e => e.preventDefault()}
-          onDrop={e => {
-            e.preventDefault()
-            const files = Array.from(e.dataTransfer.files)
-            files.forEach(file => {
-              const type = file.type.startsWith('video/') ? 'video'
-                         : file.type.startsWith('audio/') ? 'audio'
-                         : 'image'
-              addMediaItem({ type, name: file.name, size: `${(file.size / 1024 / 1024).toFixed(1)} MB` })
-            })
-          }}
-        >
-          <Upload size={14} className="text-text-disabled" />
-          <span className="text-2xs text-text-disabled font-ui">Drop files here</span>
-        </div>
       </div>
-    </div>
-  )
-}
 
-function MediaThumb({ item, selected, onSelect, onAddToTimeline }) {
-  const typeColors = { video: '#2563EB', audio: '#059669', image: '#7C3AED' }
-
-  return (
-    <div
-      className={`media-thumb ${selected ? 'selected' : ''}`}
-      onClick={onSelect}
-      onDoubleClick={onAddToTimeline}
-    >
-      {/* Thumbnail area */}
-      <div className="aspect-video bg-navy-950 relative overflow-hidden">
-        {/* Fake thumbnail gradient */}
-        <div
-          className="absolute inset-0"
-          style={{
-            background: `linear-gradient(135deg, ${typeColors[item.type]}22 0%, ${typeColors[item.type]}08 100%)`,
-          }}
-        />
-        <div className="absolute inset-0 flex items-center justify-center">
-          <TypeIcon type={item.type} size={20} />
-        </div>
-
-        {/* Duration badge */}
-        {item.duration && (
-          <div className="absolute bottom-1 right-1 bg-navy-950/90 rounded px-1 py-0.5">
-            <span className="font-mono text-2xs text-text-muted">{formatDuration(item.duration)}</span>
-          </div>
+      {/* Preview modal */}
+      <AnimatePresence>
+        {previewAsset && (
+          <AssetPreviewModal
+            asset={previewAsset}
+            onClose={() => setPreviewAsset(null)}
+            onAddToTimeline={handleAddToTimeline}
+            onDelete={deleteAsset}
+            onPrev={() => navigatePreview(-1)}
+            onNext={() => navigatePreview(1)}
+            hasPrev={previewIndex > 0}
+            hasNext={previewIndex < filtered.length - 1}
+          />
         )}
-
-        {/* FPS badge for video */}
-        {item.fps && (
-          <div className="absolute top-1 right-1 bg-navy-950/90 rounded px-1 py-0.5">
-            <span className="font-mono text-2xs text-text-muted">{item.fps}fps</span>
-          </div>
-        )}
-
-        {/* Hover overlay */}
-        <div className="absolute inset-0 bg-navy-950/0 group-hover:bg-navy-950/40 transition-colors duration-150 flex items-center justify-center">
-          <button
-            className="opacity-0 group-hover:opacity-100 bg-cyan-brand text-navy-900 rounded-full p-1.5
-                       transition-all duration-150 hover:scale-110"
-            onClick={(e) => { e.stopPropagation(); onAddToTimeline() }}
-            title="Add to timeline"
-          >
-            <Plus size={11} />
-          </button>
-        </div>
-      </div>
-
-      {/* Metadata */}
-      <div className="px-1.5 py-1">
-        <p className="text-2xs font-ui text-text-secondary truncate leading-tight" title={item.name}>
-          {item.name}
-        </p>
-        <div className="flex items-center justify-between mt-0.5">
-          <span className="text-2xs font-mono text-text-disabled">{item.size}</span>
-          <TypeIcon type={item.type} size={9} />
-        </div>
-      </div>
+      </AnimatePresence>
     </div>
-  )
+  );
 }

@@ -81,3 +81,28 @@ router.delete(
 );
 
 export default router;
+
+// ─── Edit routes (added for asset editing feature) ────────────────────────────
+import { editAsset, previewEdit } from '../controllers/assetEdit.controller.js';
+
+/**
+ * @route   POST /api/media/:id/edit
+ * @access  Private
+ * @desc    Apply edits (brightness, crop, filters, etc.) and save as new asset
+ */
+router.post(
+  '/:id/edit',
+  [param('id').isUUID().withMessage('Invalid asset ID')],
+  editAsset
+);
+
+/**
+ * @route   POST /api/media/:id/preview
+ * @access  Private
+ * @desc    Get instant preview URL with transformations applied (no upload)
+ */
+router.post(
+  '/:id/preview',
+  [param('id').isUUID().withMessage('Invalid asset ID')],
+  previewEdit
+);

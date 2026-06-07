@@ -64,6 +64,8 @@ export function useMedia(isAuthenticated) {
       });
 
       toast.success(`${file.name} uploaded`, { id: toastId });
+      // Reload full list from API to stay in sync with DB
+      loadAssets();
       return asset;
     } catch (err) {
       const message = err.response?.data?.message || 'Upload failed';
@@ -73,7 +75,7 @@ export function useMedia(isAuthenticated) {
       setUploading(false);
       setUploadProgress(0);
     }
-  }, [addMediaItem]);
+  }, [addMediaItem, loadAssets]);
 
   // ── Upload multiple files ──────────────────────────────────────────────────
   const uploadFiles = useCallback(async (files) => {
@@ -86,14 +88,16 @@ export function useMedia(isAuthenticated) {
         (pct) => setUploadProgress(pct)
       );
 
-      setAssets((prev) => [...result.succeeded, ...prev]);
+      const uploaded = result.assets || result.succeeded || [];
+      const failed    = result.errors  || result.failed   || [];
+      setAssets((prev) => [...uploaded, ...prev]);
       toast.success(
-        `Uploaded ${result.succeeded.length} of ${files.length} files`,
+        `Uploaded ${uploaded.length} of ${files.length} files`,
         { id: toastId }
       );
 
-      if (result.failed?.length > 0) {
-        toast.error(`${result.failed.length} file(s) failed to upload`);
+      if (failed.length > 0) {
+        toast.error(`${failed.length} file(s) failed to upload`);
       }
 
       return result;
