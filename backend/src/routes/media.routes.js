@@ -106,3 +106,17 @@ router.post(
   [param('id').isUUID().withMessage('Invalid asset ID')],
   previewEdit
 );
+
+// ─── Object removal route (brush mask + LaMa inpainting) ─────────────────────
+import { removeObject } from '../controllers/objectRemoval.controller.js';
+
+/**
+ * @route   POST /api/media/:id/remove-object
+ * @access  Private
+ * @desc    Run LaMa inpainting with a painted mask — saves result to Cloudinary
+ */
+router.post(
+  '/:id/remove-object',
+  [param('id').isUUID().withMessage('Invalid asset ID')],
+  removeObject
+);
