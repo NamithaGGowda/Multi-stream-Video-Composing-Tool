@@ -1,0 +1,16 @@
+[2026-06-09T14:27:46.128Z] === Object removal started ===
+[2026-06-09T14:27:46.129Z] Asset: 396fc0be-ddfc-4e4c-b880-4186fe657767, image URL: https://res.cloudinary.com/dzqyxwetd/image/upload/v1780819708/editframe/b25a098e-8d1c-4501-bfa4-5697e2753291/images/editframe/b25a098e-8d1c-4501-bfa4-5697e2753291/images/949cce61-9264-497e-ac45-c3226c40ba0a.jpg
+[2026-06-09T14:27:46.130Z] Fetching original image...
+[2026-06-09T14:27:46.264Z] Image fetched: 36882 bytes
+[2026-06-09T14:27:46.265Z] Mask decoded: 1620 bytes
+[2026-06-09T14:28:14.219Z] [LaMa] Mask white pixels: 84991 / 262144 (32.4%)
+[2026-06-09T14:28:19.969Z] [LaMa] Output range: min=0.000 max=254.000
+[2026-06-09T14:28:20.084Z] LaMa done, result: 275146 bytes
+[2026-06-09T14:31:40.753Z] === Object removal started ===
+[2026-06-09T14:31:40.754Z] Asset: 396fc0be-ddfc-4e4c-b880-4186fe657767, image URL: https://res.cloudinary.com/dzqyxwetd/image/upload/v1780819708/editframe/b25a098e-8d1c-4501-bfa4-5697e2753291/images/editframe/b25a098e-8d1c-4501-bfa4-5697e2753291/images/949cce61-9264-497e-ac45-c3226c40ba0a.jpg
+[2026-06-09T14:31:40.754Z] Fetching original image...
+[2026-06-09T14:31:40.901Z] Image fetched: 36882 bytes
+[2026-06-09T14:31:40.902Z] Mask decoded: 1561 bytes
+[2026-06-09T14:31:40.935Z] [LaMa] Mask white pixels: 77818 / 262144 (29.7%)
+[2026-06-09T14:31:45.831Z] [LaMa] Output range: min=0.000 max=254.000
+[2026-06-09T14:31:45.900Z] LaMa done, result: 264401 bytes
