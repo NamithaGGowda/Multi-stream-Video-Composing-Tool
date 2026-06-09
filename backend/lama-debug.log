@@ -14,3 +14,11 @@
 [2026-06-09T14:31:40.935Z] [LaMa] Mask white pixels: 77818 / 262144 (29.7%)
 [2026-06-09T14:31:45.831Z] [LaMa] Output range: min=0.000 max=254.000
 [2026-06-09T14:31:45.900Z] LaMa done, result: 264401 bytes
+[2026-06-09T14:45:39.580Z] === Object removal started ===
+[2026-06-09T14:45:39.581Z] Asset: 396fc0be-ddfc-4e4c-b880-4186fe657767, image URL: https://res.cloudinary.com/dzqyxwetd/image/upload/v1780819708/editframe/b25a098e-8d1c-4501-bfa4-5697e2753291/images/editframe/b25a098e-8d1c-4501-bfa4-5697e2753291/images/949cce61-9264-497e-ac45-c3226c40ba0a.jpg
+[2026-06-09T14:45:39.582Z] Fetching original image...
+[2026-06-09T14:45:39.670Z] Image fetched: 36882 bytes
+[2026-06-09T14:45:39.672Z] Mask decoded: 1575 bytes
+[2026-06-09T14:46:02.158Z] [LaMa] Mask white pixels: 88185 / 262144 (33.6%)
+[2026-06-09T14:46:06.749Z] [LaMa] Output range: min=0.000 max=254.000
+[2026-06-09T14:46:06.826Z] LaMa done, result: 264968 bytes
