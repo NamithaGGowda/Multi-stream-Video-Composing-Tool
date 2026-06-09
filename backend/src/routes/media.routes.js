@@ -108,7 +108,18 @@ router.post(
 );
 
 // ─── Object removal route (brush mask + LaMa inpainting) ─────────────────────
-import { removeObject } from '../controllers/objectRemoval.controller.js';
+import { removeObject, detectObject } from '../controllers/objectRemoval.controller.js';
+
+/**
+ * @route   POST /api/media/:id/detect-object
+ * @access  Private
+ * @desc    Run MobileSAM on a click point — returns a mask of the object
+ */
+router.post(
+  '/:id/detect-object',
+  [param('id').isUUID().withMessage('Invalid asset ID')],
+  detectObject
+);
 
 /**
  * @route   POST /api/media/:id/remove-object
