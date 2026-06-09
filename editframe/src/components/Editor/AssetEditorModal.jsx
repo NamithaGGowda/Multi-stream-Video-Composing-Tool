@@ -3,11 +3,12 @@ import { motion } from 'framer-motion';
 import {
   X, RotateCcw, RotateCw, FlipHorizontal, FlipVertical,
   Sliders, Palette, Crop, Type, Check, RefreshCw,
-  Sun, Contrast, Droplets, Zap, Wind, Eye, Circle
+  Sun, Contrast, Droplets, Zap, Wind, Eye, Circle, Eraser
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../services/api.service.js';
 import SaveOptionsDialog from './SaveOptionsDialog.jsx';
+import ObjectRemovalTool from './ObjectRemovalTool.jsx';
 
 const DEFAULT_EDITS = {
   brightness: 0, contrast: 0, saturation: 0, exposure: 0,
@@ -31,20 +32,18 @@ const FILTERS = [
 ];
 
 const CROP_RATIOS = [
-  { id: null,   label: 'Free' },
-  { id: '16:9', label: '16:9' },
-  { id: '9:16', label: '9:16' },
-  { id: '1:1',  label: '1:1'  },
-  { id: '4:3',  label: '4:3'  },
-  { id: '3:4',  label: '3:4'  },
+  { id: null,   label: 'Free' }, { id: '16:9', label: '16:9' },
+  { id: '9:16', label: '9:16' }, { id: '1:1',  label: '1:1'  },
+  { id: '4:3',  label: '4:3'  }, { id: '3:4',  label: '3:4'  },
   { id: '21:9', label: '21:9' },
 ];
 
 const TABS = [
-  { id: 'adjust',    label: 'Adjust',    icon: Sliders },
-  { id: 'filters',   label: 'Filters',   icon: Palette },
-  { id: 'transform', label: 'Transform', icon: Crop    },
-  { id: 'text',      label: 'Text',      icon: Type    },
+  { id: 'adjust',    label: 'Adjust',    icon: Sliders  },
+  { id: 'filters',   label: 'Filters',   icon: Palette  },
+  { id: 'transform', label: 'Transform', icon: Crop     },
+  { id: 'text',      label: 'Text',      icon: Type     },
+  { id: 'remove',    label: 'Remove',    icon: Eraser   },
 ];
 
 // ─── Slider ───────────────────────────────────────────────────────────────────
@@ -61,7 +60,8 @@ function Slider({ icon: Icon, label, value, min, max, onChange, color = 'cyan' }
           <span className="text-[11px] text-white/60 font-medium">{label}</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="text-[11px] font-mono w-8 text-right" style={{ color: value !== 0 ? accent : 'rgba(255,255,255,0.3)' }}>
+          <span className="text-[11px] font-mono w-8 text-right"
+            style={{ color: value !== 0 ? accent : 'rgba(255,255,255,0.3)' }}>
             {value > 0 ? `+${value}` : value}
           </span>
           {value !== 0 && (
@@ -77,10 +77,11 @@ function Slider({ icon: Icon, label, value, min, max, onChange, color = 'cyan' }
           onChange(Math.round(min + (e.clientX - rect.left) / rect.width * (max - min)));
         }}
       >
-        {min < 0 && <div className="absolute top-0 bottom-0 w-px bg-white/20" style={{ left: `${(0-min)/(max-min)*100}%` }} />}
+        {min < 0 && <div className="absolute top-0 bottom-0 w-px bg-white/20"
+          style={{ left: `${(0 - min) / (max - min) * 100}%` }} />}
         <div className="absolute top-0 h-full rounded-full" style={{
-          left: min < 0 ? `${Math.min(50,pct)}%` : '0%',
-          width: min < 0 ? `${Math.abs(pct-50)}%` : `${pct}%`,
+          left: min < 0 ? `${Math.min(50, pct)}%` : '0%',
+          width: min < 0 ? `${Math.abs(pct - 50)}%` : `${pct}%`,
           background: accent, opacity: 0.8,
         }} />
         <input type="range" min={min} max={max} value={value}
@@ -88,14 +89,13 @@ function Slider({ icon: Icon, label, value, min, max, onChange, color = 'cyan' }
           className="absolute inset-0 w-full opacity-0 cursor-pointer h-full"
         />
         <div className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full border-2 border-white shadow-sm"
-          style={{ left: `calc(${pct}% - 6px)`, background: accent }}
-        />
+          style={{ left: `calc(${pct}% - 6px)`, background: accent }} />
       </div>
     </div>
   );
 }
 
-// ─── Tabs ─────────────────────────────────────────────────────────────────────
+// ─── Tab panels ───────────────────────────────────────────────────────────────
 
 function AdjustTab({ edits, onChange }) {
   const set = (key) => (val) => onChange({ ...edits, [key]: val });
@@ -155,10 +155,7 @@ function TransformTab({ edits, onChange }) {
       <div>
         <p className="text-[10px] uppercase tracking-wider text-white/30 font-semibold mb-2">Flip</p>
         <div className="flex gap-2">
-          {[
-            { key: 'flipH', Icon: FlipHorizontal, label: 'Horizontal' },
-            { key: 'flipV', Icon: FlipVertical,   label: 'Vertical'   },
-          ].map(({ key, Icon, label }) => (
+          {[{ key: 'flipH', Icon: FlipHorizontal, label: 'Horizontal' }, { key: 'flipV', Icon: FlipVertical, label: 'Vertical' }].map(({ key, Icon, label }) => (
             <button key={key} onClick={() => onChange({ ...edits, [key]: !edits[key] })}
               className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl border text-xs transition-all ${
                 edits[key] ? 'bg-cyan-500/20 border-cyan-500/40 text-cyan-400' : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10'
@@ -179,9 +176,7 @@ function TransformTab({ edits, onChange }) {
                   ? 'bg-cyan-500/20 border-cyan-500/40 text-cyan-400'
                   : 'bg-white/5 border-white/10 text-white/40 hover:border-white/20'
               }`}
-            >
-              {r.label}
-            </button>
+            >{r.label}</button>
           ))}
         </div>
       </div>
@@ -245,7 +240,7 @@ function TextTab({ edits, onChange }) {
   );
 }
 
-// ─── Main component ───────────────────────────────────────────────────────────
+// ─── Main Editor Modal ────────────────────────────────────────────────────────
 
 export default function AssetEditorModal({ asset, onClose, onSaved }) {
   const [edits, setEdits]               = useState({ ...DEFAULT_EDITS });
@@ -253,12 +248,15 @@ export default function AssetEditorModal({ asset, onClose, onSaved }) {
   const [saving, setSaving]             = useState(false);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
 
-  const hasChanges = JSON.stringify(edits) !== JSON.stringify(DEFAULT_EDITS);
-  const mediaUrl   = asset.cloudinarySecureUrl || asset.cloudinaryUrl;
-  const isVideo    = asset.type === 'VIDEO';
+  const hasChanges   = JSON.stringify(edits) !== JSON.stringify(DEFAULT_EDITS);
+  const mediaUrl     = asset.cloudinarySecureUrl || asset.cloudinaryUrl;
+  const isVideo      = asset.type === 'VIDEO';
+  const isRemoveTab  = activeTab === 'remove';
 
   useEffect(() => {
-    const handler = (e) => { if (e.key === 'Escape' && !showSaveDialog) onClose(); };
+    const handler = (e) => {
+      if (e.key === 'Escape' && !showSaveDialog) onClose();
+    };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [onClose, showSaveDialog]);
@@ -269,7 +267,8 @@ export default function AssetEditorModal({ asset, onClose, onSaved }) {
       edits.contrast   !== 0 ? `contrast(${1 + edits.contrast / 100})`     : '',
       edits.saturation !== 0 ? `saturate(${1 + edits.saturation / 100})`   : '',
       edits.blur       >   0 ? `blur(${edits.blur * 0.1}px)`               : '',
-      ...(FILTERS.find(f => f.id === edits.filter)?.style?.filter ? [FILTERS.find(f => f.id === edits.filter).style.filter] : []),
+      ...(FILTERS.find(f => f.id === edits.filter)?.style?.filter
+        ? [FILTERS.find(f => f.id === edits.filter).style.filter] : []),
     ].filter(Boolean).join(' ') || 'none',
     transform: [
       edits.rotate ? `rotate(${edits.rotate}deg)` : '',
@@ -285,21 +284,19 @@ export default function AssetEditorModal({ asset, onClose, onSaved }) {
 
   const handleConfirmSave = async ({ mode, newName }) => {
     setSaving(true);
-    const toastId = toast.loading(mode === 'replace' ? 'Replacing original file…' : 'Saving new copy…');
+    const toastId = toast.loading(mode === 'replace' ? 'Replacing original…' : 'Saving new copy…');
     try {
       const response = await api.post(`/media/${asset.id}/edit`, { edits, mode, newName });
-      const { asset: savedAsset, mode: savedMode } = response.data.data;
+      const { asset: saved, mode: savedMode } = response.data.data;
       toast.success(
-        savedMode === 'replace'
-          ? 'Original file updated successfully!'
-          : `Saved as "${savedAsset.name}" in your media library!`,
+        savedMode === 'replace' ? 'Original updated!' : `Saved as "${saved.name}"!`,
         { id: toastId }
       );
       setShowSaveDialog(false);
-      onSaved?.(savedAsset, savedMode);
+      onSaved?.(saved, savedMode);
       onClose();
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to save edits', { id: toastId });
+      toast.error(err.response?.data?.message || 'Failed to save', { id: toastId });
     } finally {
       setSaving(false);
     }
@@ -320,81 +317,154 @@ export default function AssetEditorModal({ asset, onClose, onSaved }) {
               <X className="w-4 h-4" />
             </button>
             <div>
-              <p className="text-sm font-semibold text-white">Edit — {asset.name}</p>
-              <p className="text-[11px] text-white/30">{asset.type}{asset.width ? ` · ${asset.width}×${asset.height}` : ''}</p>
+              <p className="text-sm font-semibold text-white">
+                {isRemoveTab ? 'Remove Object' : 'Edit'} — {asset.name}
+              </p>
+              <p className="text-[11px] text-white/30">
+                {isRemoveTab
+                  ? 'Brush to select · LaMa inpainting'
+                  : `${asset.type}${asset.width ? ` · ${asset.width}×${asset.height}` : ''}`}
+              </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            {hasChanges && (
-              <button onClick={() => setEdits({ ...DEFAULT_EDITS })}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/5 text-xs transition-colors"
+
+          {/* Save button — only shown on non-remove tabs */}
+          {!isRemoveTab && (
+            <div className="flex items-center gap-2">
+              {hasChanges && (
+                <button onClick={() => setEdits({ ...DEFAULT_EDITS })}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/5 text-xs transition-colors"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" /> Reset
+                </button>
+              )}
+              <button onClick={handleSaveClick} disabled={saving}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-400 text-sm font-medium transition-all disabled:opacity-50"
               >
-                <RotateCcw className="w-3.5 h-3.5" /> Reset
+                {saving
+                  ? <><RefreshCw className="w-4 h-4 animate-spin" /> Saving…</>
+                  : <><Check className="w-4 h-4" /> Save</>}
               </button>
-            )}
-            <button onClick={handleSaveClick} disabled={saving}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-400 text-sm font-medium transition-all disabled:opacity-50"
-            >
-              {saving
-                ? <><RefreshCw className="w-4 h-4 animate-spin" /> Saving…</>
-                : <><Check className="w-4 h-4" /> Save</>
-              }
-            </button>
-          </div>
+            </div>
+          )}
         </div>
 
         {/* Body */}
         <div className="flex flex-1 overflow-hidden">
-          {/* Preview */}
-          <div className="flex-1 bg-[#060C18] flex items-center justify-center overflow-hidden relative">
-            {isVideo
-              ? <video src={mediaUrl} controls className="max-w-full max-h-full" style={{ maxHeight: '80vh', ...cssPreview }} />
-              : <img src={mediaUrl} alt={asset.name} className="max-w-full max-h-full object-contain"
-                  style={{ maxHeight: '80vh', ...cssPreview, transition: 'filter 0.15s, transform 0.15s' }}
+
+          {/* ── Remove tab: full-width canvas tool ── */}
+          {isRemoveTab ? (
+            <>
+              {/* Left: canvas */}
+              <div className="flex-1 overflow-hidden">
+                <ObjectRemovalTool
+                  asset={asset}
+                  onSaved={(saved, mode) => {
+                    onSaved?.(saved, mode);
+                    onClose();
+                  }}
                 />
-            }
-            {hasChanges && (
-              <div className="absolute top-3 left-3 flex items-center gap-1.5 bg-cyan-500/20 border border-cyan-500/30 rounded-lg px-2.5 py-1">
-                <div className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
-                <span className="text-[11px] text-cyan-400 font-medium">Edits applied</span>
               </div>
-            )}
-          </div>
 
-          {/* Right panel */}
-          <div className="w-72 bg-[#0D1526] border-l border-white/8 flex flex-col flex-shrink-0">
-            {/* Tab bar */}
-            <div className="flex border-b border-white/8">
-              {TABS.map(({ id, label, icon: Icon }) => (
-                <button key={id} onClick={() => setActiveTab(id)}
-                  className={`flex-1 flex flex-col items-center gap-1 py-2.5 text-[10px] font-medium transition-colors border-b-2 ${
-                    activeTab === id ? 'border-cyan-500 text-cyan-400' : 'border-transparent text-white/30 hover:text-white/60'
-                  }`}
-                >
-                  <Icon className="w-3.5 h-3.5" />
-                  {label}
-                </button>
-              ))}
-            </div>
+              {/* Right: info panel */}
+              <div className="w-64 bg-[#0D1526] border-l border-white/8 flex flex-col flex-shrink-0">
+                {/* Tab bar */}
+                <div className="flex border-b border-white/8">
+                  {TABS.map(({ id, label, icon: Icon }) => (
+                    <button key={id} onClick={() => setActiveTab(id)}
+                      className={`flex-1 flex flex-col items-center gap-1 py-2.5 text-[10px] font-medium transition-colors border-b-2 ${
+                        activeTab === id ? 'border-red-500 text-red-400' : 'border-transparent text-white/30 hover:text-white/60'
+                      }`}
+                    >
+                      <Icon className="w-3.5 h-3.5" />
+                      {label}
+                    </button>
+                  ))}
+                </div>
 
-            {/* Tab content */}
-            <div className="flex-1 overflow-y-auto scrollbar-hide">
-              {activeTab === 'adjust'    && <AdjustTab    edits={edits} onChange={setEdits} />}
-              {activeTab === 'filters'   && <FiltersTab   edits={edits} onChange={setEdits} previewSrc={mediaUrl} />}
-              {activeTab === 'transform' && <TransformTab edits={edits} onChange={setEdits} />}
-              {activeTab === 'text'      && <TextTab      edits={edits} onChange={setEdits} />}
-            </div>
+                {/* How it works */}
+                <div className="p-4 space-y-4">
+                  <p className="text-[10px] uppercase tracking-wider text-white/30 font-semibold">How it works</p>
+                  {[
+                    { n: '1', t: 'Paint over the object', d: 'Brush over the object you want to remove. Use +/- to size the brush.' },
+                    { n: '2', t: 'Check the red area', d: 'The red overlay is what gets removed. Clear and repaint to adjust.' },
+                    { n: '3', t: 'Remove Object', d: 'LaMa AI fills in the background as if the object was never there' },
+                    { n: '4', t: 'Save', d: 'Choose to save as new copy or replace the original' },
+                  ].map(({ n, t, d }) => (
+                    <div key={n} className="flex gap-2.5">
+                      <div className="w-5 h-5 rounded-full bg-red-500/20 border border-red-500/30 flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <span className="text-[10px] text-red-400 font-bold">{n}</span>
+                      </div>
+                      <div>
+                        <p className="text-[11px] text-white/70 font-medium">{t}</p>
+                        <p className="text-[10px] text-white/30 mt-0.5 leading-relaxed">{d}</p>
+                      </div>
+                    </div>
+                  ))}
 
-            <div className="p-3 border-t border-white/8 text-center">
-              <p className="text-[10px] text-white/20 leading-relaxed">
-                Preview updates instantly. Saving creates a new copy or replaces the original.
-              </p>
-            </div>
-          </div>
+                  <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 mt-2">
+                    <p className="text-[10px] text-amber-300/80 leading-relaxed">
+                      AI processing takes <strong className="text-amber-300">30–90 seconds</strong>. Keep this window open until complete.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </>
+          ) : (
+            /* ── Other tabs: standard preview + controls ── */
+            <>
+              {/* Preview */}
+              <div className="flex-1 bg-[#060C18] flex items-center justify-center overflow-hidden relative">
+                {isVideo
+                  ? <video src={mediaUrl} controls className="max-w-full max-h-full" style={{ maxHeight: '80vh', ...cssPreview }} />
+                  : <img src={mediaUrl} alt={asset.name} className="max-w-full max-h-full object-contain"
+                      style={{ maxHeight: '80vh', ...cssPreview, transition: 'filter 0.15s, transform 0.15s' }}
+                    />
+                }
+                {hasChanges && (
+                  <div className="absolute top-3 left-3 flex items-center gap-1.5 bg-cyan-500/20 border border-cyan-500/30 rounded-lg px-2.5 py-1">
+                    <div className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+                    <span className="text-[11px] text-cyan-400 font-medium">Edits applied</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Right panel */}
+              <div className="w-72 bg-[#0D1526] border-l border-white/8 flex flex-col flex-shrink-0">
+                <div className="flex border-b border-white/8">
+                  {TABS.map(({ id, label, icon: Icon }) => (
+                    <button key={id} onClick={() => setActiveTab(id)}
+                      className={`flex-1 flex flex-col items-center gap-1 py-2.5 text-[10px] font-medium transition-colors border-b-2 ${
+                        activeTab === id
+                          ? id === 'remove' ? 'border-red-500 text-red-400' : 'border-cyan-500 text-cyan-400'
+                          : 'border-transparent text-white/30 hover:text-white/60'
+                      }`}
+                    >
+                      <Icon className="w-3.5 h-3.5" />
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex-1 overflow-y-auto scrollbar-hide">
+                  {activeTab === 'adjust'    && <AdjustTab    edits={edits} onChange={setEdits} />}
+                  {activeTab === 'filters'   && <FiltersTab   edits={edits} onChange={setEdits} previewSrc={mediaUrl} />}
+                  {activeTab === 'transform' && <TransformTab edits={edits} onChange={setEdits} />}
+                  {activeTab === 'text'      && <TextTab      edits={edits} onChange={setEdits} />}
+                </div>
+
+                <div className="p-3 border-t border-white/8 text-center">
+                  <p className="text-[10px] text-white/20">
+                    Preview is live. Saving processes the image with Sharp.
+                  </p>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </motion.div>
 
-      {/* Save dialog — rendered as sibling, outside the editor motion.div */}
+      {/* Save dialog for edits (not remove — that has its own dialog) */}
       {showSaveDialog && (
         <SaveOptionsDialog
           asset={asset}
